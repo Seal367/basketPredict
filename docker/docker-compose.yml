@@ -3,7 +3,7 @@ version: '3.8'
 services:
   basketball-prediction:
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile
     image: basketball-prediction:latest
     container_name: basketball-prediction-container

@@ -18,7 +18,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tsinghua.edu.cn/simple
 
 # 复制项目文件
-COPY . .
+COPY .. .
 
 # 创建数据和结果目录
 RUN mkdir -p /app/data /app/results

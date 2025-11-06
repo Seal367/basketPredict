@@ -6,7 +6,7 @@ from torch.utils.data import TensorDataset, DataLoader
 
 from model import DiffusionPredictor
 
-BATCH_SIZE=8
+BATCH_SIZE=4
 
 
 def train_epoch(model, train_loader, optimizer, criterion, device):

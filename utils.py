@@ -6,6 +6,8 @@ from torch.utils.data import TensorDataset, DataLoader
 
 from model import DiffusionPredictor
 
+BATCH_SIZE=8
+
 
 def train_epoch(model, train_loader, optimizer, criterion, device):
     """
@@ -96,10 +98,10 @@ def train_fold(X_train, y_train, X_val, y_val, fold_idx, device):
 
     # 创建数据加载器 - 优化显存使用
     train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
-    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, pin_memory=(device.type == 'cuda'))
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, pin_memory=(device.type == 'cuda'))
     
     val_dataset = TensorDataset(X_val_tensor, y_val_tensor)
-    val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False, pin_memory=(device.type == 'cuda'))
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, pin_memory=(device.type == 'cuda'))
 
     # 初始化模型 - 超大改進版本
     model = DiffusionPredictor(

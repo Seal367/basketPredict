@@ -18,13 +18,21 @@ if torch.cuda.is_available():
 
 warnings.filterwarnings('ignore')
 
-# 设备配置
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f"使用设备: {DEVICE}")
+# 设备配置 - 优先使用 CUDA，GPU 不可用时降级到 CPU
+if torch.cuda.is_available():
+    DEVICE = torch.device('cuda')
+    print(f"✓ CUDA 可用，使用 GPU 进行训练")
+    print(f"  GPU 设备: {torch.cuda.get_device_name(0)}")
+    print(f"  CUDA 版本: {torch.version.cuda}")
+else:
+    DEVICE = torch.device('cpu')
+    print(f"✗ CUDA 不可用，降级使用 CPU 进行训练")
+
+print(f"\n最终使用设备: {DEVICE}")
 
 def main():
     # 配置参数
-    csv_path = 'd:/txw_uni/programmingproject/pycharm/basketPrediction/data/basket.csv'
+    csv_path = './data/basket.csv'
     lookback = 7  # 使用前7天数据
     n_splits = 10  # 5折交叉验证
     
@@ -127,7 +135,7 @@ def main():
         })
         
         # 保存预测结果
-        output_path = 'd:/txw_uni/programmingproject/pycharm/basketPrediction/predictions.csv'
+        output_path = './results/predictions.csv'
         results_df.to_csv(output_path, index=False, encoding='utf-8-sig')
         print(f"\n预测结果已保存到: {output_path}")
         

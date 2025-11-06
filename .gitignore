@@ -17,10 +17,10 @@ build/
 *.swo
 *~
 
-# Data files
-data/
-*.csv
-predictions.csv
+## Data files
+#data/
+#*.csv
+#predictions.csv
 
 # OS
 .DS_Store

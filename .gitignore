@@ -17,7 +17,10 @@ build/
 *.swo
 *~
 
-
+# Data files - 注释掉以便上传数据文件
+#data/
+#*.csv
+#predictions.csv
 
 # OS - 排除操作系统特定文件
 .DS_Store

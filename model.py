@@ -109,19 +109,20 @@ class DiffusionPredictor(nn.Module):
         self.num_timesteps = num_timesteps
         self.input_dim = input_dim
 
-        # 输入编码层 - 更强大的编码
-        self.input_encoder = nn.Sequential(
-            nn.Linear(input_dim * seq_len, hidden_dim // 2),
-            nn.LayerNorm(hidden_dim // 2),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim // 2, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim)
+        # 输入编码层 - 使用 Transformer 编码器
+        self.input_proj = nn.Linear(input_dim * seq_len, hidden_dim)
+        self.input_encoder = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(
+                d_model=hidden_dim,
+                nhead=8,
+                dim_feedforward=hidden_dim * 4,
+                dropout=dropout,
+                activation='gelu',
+                batch_first=True
+            ),
+            num_layers=2
         )
+        self.input_encoder_norm = nn.LayerNorm(hidden_dim)
 
         # 正弦时间步编码
         self.time_embedding = SinusoidalEmbedding(hidden_dim)
@@ -142,20 +143,24 @@ class DiffusionPredictor(nn.Module):
         self.denoise_input_proj = nn.Linear(hidden_dim * 2, hidden_dim)
         self.denoise_output_proj = nn.Linear(hidden_dim, hidden_dim)
 
-        # 预测头 - 更强大的分类器
-        self.classifier = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
+        # 预测头 - 使用 Transformer 解码器
+        self.classifier_decoder = nn.TransformerDecoder(
+            nn.TransformerDecoderLayer(
+                d_model=hidden_dim,
+                nhead=8,
+                dim_feedforward=hidden_dim * 4,
+                dropout=dropout,
+                activation='gelu',
+                batch_first=True
+            ),
+            num_layers=2
+        )
+        self.classifier_decoder_norm = nn.LayerNorm(hidden_dim)
+        self.classifier_head = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.LayerNorm(hidden_dim // 2),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_dim // 2, hidden_dim // 4),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim // 4, 1),
+            nn.Linear(hidden_dim // 2, 1),
             nn.Sigmoid()
         )
 
@@ -191,12 +196,21 @@ class DiffusionPredictor(nn.Module):
         # 扁平化输入
         x_flat = x.reshape(batch_size, -1)  # (batch_size, input_dim * seq_len)
 
-        # 编码输入特征
-        x_encoded = self.input_encoder(x_flat)  # (batch_size, hidden_dim)
+        # 使用 Transformer 编码器编码输入特征
+        x_proj = self.input_proj(x_flat)  # (batch_size, hidden_dim)
+        x_proj = x_proj.unsqueeze(1)  # (batch_size, 1, hidden_dim) - Transformer 需要序列输入
+        x_encoded = self.input_encoder(x_proj)  # (batch_size, 1, hidden_dim)
+        x_encoded = self.input_encoder_norm(x_encoded)  # 正则化
+        x_encoded = x_encoded.squeeze(1)  # (batch_size, hidden_dim) - 移除序列维度
 
         if inference_mode or not self.training:
             # 推理模式：直接输出预测
-            logits = self.classifier(x_encoded)
+            # 使用 Transformer 解码器进行最终分类
+            decoder_input = x_encoded.unsqueeze(1)  # (batch_size, 1, hidden_dim)
+            decoder_output = self.classifier_decoder(decoder_input, decoder_input)
+            decoder_output = self.classifier_decoder_norm(decoder_output)
+            decoder_output = decoder_output.squeeze(1)  # (batch_size, hidden_dim)
+            logits = self.classifier_head(decoder_output)
             return logits
         else:
             # 训练模式：使用扩散过程
@@ -226,6 +240,10 @@ class DiffusionPredictor(nn.Module):
             x_denoised = self.denoise_output_proj(x_denoised)
             x_denoised = x_denoised + x_encoded  # 跳跃连接
 
-            # 预测
-            logits = self.classifier(x_denoised)
+            # 使用 Transformer 解码器进行最终分类
+            decoder_input = x_denoised.unsqueeze(1)  # (batch_size, 1, hidden_dim)
+            decoder_output = self.classifier_decoder(decoder_input, decoder_input)
+            decoder_output = self.classifier_decoder_norm(decoder_output)
+            decoder_output = decoder_output.squeeze(1)  # (batch_size, hidden_dim)
+            logits = self.classifier_head(decoder_output)
             return logits

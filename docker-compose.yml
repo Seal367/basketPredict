@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  basketball-prediction:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: basketball-prediction:latest
+    container_name: basketball-prediction-container
+    
+    # GPU 配置
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    # 环境变量
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONUNBUFFERED=1
+    
+    # 挂载数据卷
+    volumes:
+      - ./data:/app/data:ro
+      - ./results:/app/results:rw
+      - ./models:/app/models:rw
+    
+    # 工作目录
+    working_dir: /app
+    
+    # 运行命令
+    command: python run.py
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

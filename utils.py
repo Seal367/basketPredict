@@ -94,12 +94,12 @@ def train_fold(X_train, y_train, X_val, y_val, fold_idx, device):
     X_val_tensor = torch.from_numpy(X_val).float()
     y_val_tensor = torch.from_numpy(y_val).long()
 
-    # 创建数据加载器
+    # 创建数据加载器 - 优化显存使用
     train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-
+    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, pin_memory=(device.type == 'cuda'))
+    
     val_dataset = TensorDataset(X_val_tensor, y_val_tensor)
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False, pin_memory=(device.type == 'cuda'))
 
     # 初始化模型 - 超大改進版本
     model = DiffusionPredictor(
@@ -147,6 +147,10 @@ def train_fold(X_train, y_train, X_val, y_val, fold_idx, device):
                 if 'best_model_state' in locals():
                     model.load_state_dict(best_model_state)
                 break
+        
+        # 显存优化：定期清理缓存
+        if (epoch + 1) % 20 == 0 and device.type == 'cuda':
+            torch.cuda.empty_cache()
 
     # 最终评估
     final_loss, final_acc, final_prec, final_recall, final_f1, final_probs, final_preds, final_labels = evaluate(
@@ -158,9 +162,13 @@ def train_fold(X_train, y_train, X_val, y_val, fold_idx, device):
     print(f"    精确率: {final_prec:.4f}")
     print(f"    召回率: {final_recall:.4f}")
     print(f"    F1分数: {final_f1:.4f}")
+    
+    # 显存优化：每个折完成后释放GPU显存
+    if device.type == 'cuda':
+        del model, optimizer, scheduler, train_loader, val_loader
+        torch.cuda.empty_cache()
 
     return {
-        'model': model,
         'accuracy': final_acc,
         'precision': final_prec,
         'recall': final_recall,

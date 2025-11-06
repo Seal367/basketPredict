@@ -18,6 +18,12 @@ if torch.cuda.is_available():
 
 warnings.filterwarnings('ignore')
 
+# PyTorch GPU 显存优化
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
 # 设备配置 - 优先使用 CUDA，GPU 不可用时降级到 CPU
 if torch.cuda.is_available():
     DEVICE = torch.device('cuda')

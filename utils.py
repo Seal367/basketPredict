@@ -103,13 +103,13 @@ def train_fold(X_train, y_train, X_val, y_val, fold_idx, device):
     val_dataset = TensorDataset(X_val_tensor, y_val_tensor)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, pin_memory=(device.type == 'cuda'))
 
-    # 初始化模型 - 超大改進版本
+    # 初始化模型 - ResNet50 风格残差块
     model = DiffusionPredictor(
         input_dim=2,
         seq_len=X_train.shape[2],
-        hidden_dim=4096,  # 扩大到 4096
+        hidden_dim=2048,  # 下降至 2048
         num_timesteps=1000,  # 维持时间步
-        dropout=0.15  # 改进 dropout 率以適应更大模型
+        dropout=0.15  # Dropout 率
     ).to(device)
 
     # 优化器和损失函数 - 適应超大模型

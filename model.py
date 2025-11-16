@@ -68,26 +68,66 @@ class AttentionBlock(nn.Module):
 
 
 class ResidualBlock(nn.Module):
-    """残差块with注意力"""
-    def __init__(self, hidden_dim, dropout=0.3):
+    """ResNet50 风格的残差块 - 使用 Bottleneck 架构"""
+    def __init__(self, hidden_dim, reduction=4, dropout=0.3):
         super(ResidualBlock, self).__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim * 8),
+        self.hidden_dim = hidden_dim
+        reduced_dim = max(hidden_dim // reduction, 64)  # 压缩维度，最小 64
+        
+        # Bottleneck 架构：1x1 -> 3x3(通过MLP) -> 1x1
+        self.conv1 = nn.Sequential(
+            nn.Linear(hidden_dim, reduced_dim),
+            nn.LayerNorm(reduced_dim),
             nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim * 8, hidden_dim),
             nn.Dropout(dropout)
         )
-        self.attention = AttentionBlock(hidden_dim, num_heads=8)
+        
+        # 中间层 - 包含注意力机制
+        self.conv2_attention = AttentionBlock(reduced_dim, num_heads=4)
+        self.conv2_mlp = nn.Sequential(
+            nn.Linear(reduced_dim, reduced_dim * 2),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(reduced_dim * 2, reduced_dim),
+            nn.Dropout(dropout)
+        )
+        
+        # 输出层 - 扩展回原维度
+        self.conv3 = nn.Sequential(
+            nn.Linear(reduced_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.Dropout(dropout)
+        )
+        
+        # 正则化层
         self.norm1 = nn.LayerNorm(hidden_dim)
-        self.norm2 = nn.LayerNorm(hidden_dim)
+        self.norm2 = nn.LayerNorm(reduced_dim)
+        self.norm3 = nn.LayerNorm(reduced_dim)
 
     def forward(self, x):
-        # 注意力分支
-        x = x + self.attention(self.norm1(x))
-        # MLP分支
-        x = x + self.mlp(self.norm2(x))
-        return x
+        # 保存输入用于残差连接
+        identity = x
+        
+        # 1x1 卷积（降维）
+        out = self.norm1(x)
+        out = self.conv1(out)
+        
+        # 3x3 卷积等效（注意力 + MLP）
+        out_norm2 = self.norm2(out)
+        out_attn = self.conv2_attention(out_norm2)
+        out = out + out_attn  # 残差连接
+        
+        out_norm3 = self.norm3(out)
+        out_mlp = self.conv2_mlp(out_norm3)
+        out = out + out_mlp  # 残差连接
+        
+        # 1x1 卷积（升维）
+        out = self.conv3(out)
+        
+        # 主残差连接
+        out = out + identity
+        
+        return out
 
 
 class DiffusionPredictor(nn.Module):
@@ -101,7 +141,7 @@ class DiffusionPredictor(nn.Module):
     - 更优的beta调度
     """
 
-    def __init__(self, input_dim=2, seq_len=7, hidden_dim=4096, num_timesteps=1000, dropout=0.3):
+    def __init__(self, input_dim=2, seq_len=7, hidden_dim=2048, num_timesteps=1000, dropout=0.3):
         super(DiffusionPredictor, self).__init__()
 
         self.seq_len = seq_len
